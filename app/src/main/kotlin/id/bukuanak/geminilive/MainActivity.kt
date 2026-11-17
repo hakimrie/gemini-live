@@ -1,4 +1,4 @@
-package com.example.geminilive
+package id.bukuanak.geminilive
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.example.geminilive.ui.theme.GeminiLiveVoiceTheme
+import id.bukuanak.geminilive.ui.theme.GeminiLiveVoiceTheme
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {

@@ -1,4 +1,4 @@
-package com.example.geminilive.ui.main
+package id.bukuanak.geminilive.ui.main
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -92,9 +92,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.example.geminilive.audio.AudioEffectsDiagnostics
-import com.example.geminilive.data.AppSettings
-import com.example.geminilive.live.LiveConnectionState
+import id.bukuanak.geminilive.audio.AudioEffectsDiagnostics
+import id.bukuanak.geminilive.data.AppSettings
+import id.bukuanak.geminilive.live.LiveConnectionState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -749,7 +749,7 @@ fun EventLogTab(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsDialog(
-    currentConfig: com.example.geminilive.data.AppConfig,
+    currentConfig: id.bukuanak.geminilive.data.AppConfig,
     onDismiss: () -> Unit,
     onSave: (apiKey: String, model: String, voice: String, aec: Boolean, gate: Boolean, prompt: String) -> Unit
 ) {

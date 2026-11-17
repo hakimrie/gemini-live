@@ -1,8 +1,8 @@
-package com.example.geminilive.live
+package id.bukuanak.geminilive.live
 
 import android.util.Base64
 import android.util.Log
-import com.example.geminilive.audio.AudioConfig
+import id.bukuanak.geminilive.audio.AudioConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow

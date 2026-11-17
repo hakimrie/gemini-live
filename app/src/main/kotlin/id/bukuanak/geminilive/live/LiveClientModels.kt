@@ -1,4 +1,4 @@
-package com.example.geminilive.live
+package id.bukuanak.geminilive.live
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

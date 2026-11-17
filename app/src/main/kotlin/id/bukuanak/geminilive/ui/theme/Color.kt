@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.example.geminilive.ui.theme
+package id.bukuanak.geminilive.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

@@ -1,17 +1,17 @@
-package com.example.geminilive.ui.main
+package id.bukuanak.geminilive.ui.main
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.geminilive.audio.AudioEffectsDiagnostics
-import com.example.geminilive.audio.AudioRecorder
-import com.example.geminilive.audio.AudioTrackPlayer
-import com.example.geminilive.audio.EchoCancellationManager
-import com.example.geminilive.data.AppConfig
-import com.example.geminilive.data.AppSettings
-import com.example.geminilive.live.GeminiLiveClient
-import com.example.geminilive.live.LiveConnectionState
-import com.example.geminilive.live.LiveEvent
+import id.bukuanak.geminilive.audio.AudioEffectsDiagnostics
+import id.bukuanak.geminilive.audio.AudioRecorder
+import id.bukuanak.geminilive.audio.AudioTrackPlayer
+import id.bukuanak.geminilive.audio.EchoCancellationManager
+import id.bukuanak.geminilive.data.AppConfig
+import id.bukuanak.geminilive.data.AppSettings
+import id.bukuanak.geminilive.live.GeminiLiveClient
+import id.bukuanak.geminilive.live.LiveConnectionState
+import id.bukuanak.geminilive.live.LiveEvent
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow

@@ -5,10 +5,10 @@ plugins {
 }
 
 android {
-  namespace = "com.example.geminilive"
+  namespace = "id.bukuanak.geminilive"
   compileSdk = 36
   defaultConfig {
-    applicationId = "com.example.geminilive"
+    applicationId = "id.bukuanak.geminilive"
     minSdk = 26
     targetSdk = 36
     versionCode = 1

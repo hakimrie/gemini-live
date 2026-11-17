@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.example.geminilive.ui.theme
+package id.bukuanak.geminilive.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme

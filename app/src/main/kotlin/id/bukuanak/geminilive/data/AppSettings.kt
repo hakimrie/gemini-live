@@ -1,4 +1,4 @@
-package com.example.geminilive.data
+package id.bukuanak.geminilive.data
 
 import android.content.Context
 import android.content.SharedPreferences
