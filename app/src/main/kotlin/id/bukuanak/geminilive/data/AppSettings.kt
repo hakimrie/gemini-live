@@ -58,12 +58,12 @@ class AppSettings(context: Context) {
         private const val KEY_SOFTWARE_ECHO_GATE = "enable_software_echo_gate"
         private const val KEY_SYSTEM_PROMPT = "system_prompt"
 
-        const val DEFAULT_MODEL = "models/gemini-2.0-flash-exp"
+        const val DEFAULT_MODEL = "models/gemini-3.8-live"
         const val DEFAULT_VOICE = "Puck"
         val AVAILABLE_VOICES = listOf("Puck", "Charon", "Aoede", "Fenrir", "Kore")
         val AVAILABLE_MODELS = listOf(
-            "models/gemini-2.0-flash-exp",
-            "models/gemini-2.0-flash-realtime-exp"
+            "models/gemini-3.8-live",
+            "models/gemini-3.8-live-extended-thinking"
         )
         const val DEFAULT_SYSTEM_PROMPT =
             "You are a helpful, conversational, and direct voice assistant. Keep answers natural, friendly, and concise."

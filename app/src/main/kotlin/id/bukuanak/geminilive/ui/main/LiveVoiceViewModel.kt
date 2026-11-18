@@ -12,6 +12,7 @@ import id.bukuanak.geminilive.data.AppSettings
 import id.bukuanak.geminilive.live.GeminiLiveClient
 import id.bukuanak.geminilive.live.LiveConnectionState
 import id.bukuanak.geminilive.live.LiveEvent
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,7 +54,7 @@ class LiveVoiceViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var liveClient: GeminiLiveClient? = null
     private var clientEventJob: Job? = null
-    private var recordingChunkJob: Job? = null
+    private var connectionStateJob: Job? = null
 
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
@@ -136,15 +137,19 @@ class LiveVoiceViewModel(application: Application) : AndroidViewModel(applicatio
         liveClient = client
 
         // Listen to client events
-        clientEventJob = viewModelScope.launch {
+        clientEventJob = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             client.events.collect { event ->
                 handleLiveEvent(event)
             }
         }
 
         // Listen to connection state
-        viewModelScope.launch {
+        connectionStateJob = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             client.connectionState.collect { state ->
+                if (state == LiveConnectionState.ERROR || state == LiveConnectionState.DISCONNECTED) {
+                    audioRecorder.stopRecording()
+                    audioTrackPlayer.stopAndFlush()
+                }
                 _uiState.update { it.copy(connectionState = state) }
             }
         }
@@ -226,8 +231,8 @@ class LiveVoiceViewModel(application: Application) : AndroidViewModel(applicatio
     fun disconnect() {
         clientEventJob?.cancel()
         clientEventJob = null
-        recordingChunkJob?.cancel()
-        recordingChunkJob = null
+        connectionStateJob?.cancel()
+        connectionStateJob = null
 
         audioRecorder.stopRecording()
         audioTrackPlayer.stopAndFlush()

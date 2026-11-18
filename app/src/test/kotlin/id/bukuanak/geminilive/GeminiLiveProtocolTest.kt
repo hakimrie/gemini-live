@@ -4,7 +4,7 @@ import id.bukuanak.geminilive.audio.AudioConfig
 import id.bukuanak.geminilive.live.ClientMessage
 import id.bukuanak.geminilive.live.Content
 import id.bukuanak.geminilive.live.GenerationConfig
-import id.bukuanak.geminilive.live.MediaChunk
+import id.bukuanak.geminilive.live.InlineData
 import id.bukuanak.geminilive.live.Part
 import id.bukuanak.geminilive.live.PrebuiltVoiceConfig
 import id.bukuanak.geminilive.live.RealtimeInput
@@ -42,7 +42,7 @@ class GeminiLiveProtocolTest {
     fun setupMessage_serialization_containsRequiredFields() {
         val setupPayload = ClientMessage(
             setup = SetupConfig(
-                model = "models/gemini-2.0-flash-exp",
+                model = "models/gemini-3.8-live",
                 generationConfig = GenerationConfig(
                     responseModalities = listOf("AUDIO"),
                     speechConfig = SpeechConfig(
@@ -59,7 +59,7 @@ class GeminiLiveProtocolTest {
 
         val serialized = json.encodeToString(ClientMessage.serializer(), setupPayload)
 
-        assertTrue(serialized.contains("models/gemini-2.0-flash-exp"))
+        assertTrue(serialized.contains("models/gemini-3.8-live"))
         assertTrue(serialized.contains("\"voiceName\":\"Puck\""))
         assertTrue(serialized.contains("\"responseModalities\":[\"AUDIO\"]"))
         assertTrue(serialized.contains("Concise voice assistant."))
@@ -70,11 +70,9 @@ class GeminiLiveProtocolTest {
         val dummyBase64 = "AAAA////AAAA////"
         val message = ClientMessage(
             realtimeInput = RealtimeInput(
-                mediaChunks = listOf(
-                    MediaChunk(
-                        mimeType = AudioConfig.MIME_TYPE_PCM_16KHZ,
-                        data = dummyBase64
-                    )
+                audio = InlineData(
+                    mimeType = AudioConfig.MIME_TYPE_PCM_16KHZ,
+                    data = dummyBase64
                 )
             )
         )
@@ -107,8 +105,10 @@ class GeminiLiveProtocolTest {
                 "modelTurn": {
                   "parts": [
                     {
-                      "mimeType": "audio/pcm;rate=24000",
-                      "data": "UklGRgAAAABXQVZFZm10"
+                      "inlineData": {
+                        "mimeType": "audio/pcm;rate=24000",
+                        "data": "UklGRgAAAABXQVZFZm10"
+                      }
                     },
                     {
                       "text": "Hello, how can I assist you today?"
@@ -127,8 +127,8 @@ class GeminiLiveProtocolTest {
         assertEquals(2, serverContent?.modelTurn?.parts?.size)
 
         val audioPart = serverContent?.modelTurn?.parts?.get(0)
-        assertEquals("audio/pcm;rate=24000", audioPart?.mimeType)
-        assertEquals("UklGRgAAAABXQVZFZm10", audioPart?.data)
+        assertEquals("audio/pcm;rate=24000", audioPart?.inlineData?.mimeType)
+        assertEquals("UklGRgAAAABXQVZFZm10", audioPart?.inlineData?.data)
 
         val textPart = serverContent?.modelTurn?.parts?.get(1)
         assertEquals("Hello, how can I assist you today?", textPart?.text)

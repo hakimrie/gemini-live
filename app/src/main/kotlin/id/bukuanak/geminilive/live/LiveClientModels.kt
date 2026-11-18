@@ -1,6 +1,5 @@
 package id.bukuanak.geminilive.live
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 // --- Client -> Server Payloads ---
@@ -42,13 +41,7 @@ data class PrebuiltVoiceConfig(
 
 @Serializable
 data class RealtimeInput(
-    val mediaChunks: List<MediaChunk>
-)
-
-@Serializable
-data class MediaChunk(
-    val mimeType: String,
-    val data: String // Base64 PCM data
+    val audio: InlineData
 )
 
 @Serializable
@@ -81,8 +74,12 @@ data class InlineData(
 data class ServerMessage(
     val setupComplete: SetupComplete? = null,
     val serverContent: ServerContent? = null,
-    val toolCall: ToolCall? = null
+    val toolCall: ToolCall? = null,
+    val error: ServerError? = null
 )
+
+@Serializable
+data class ServerError(val code: Int = 0, val message: String = "Unknown API error")
 
 @Serializable
 class SetupComplete
@@ -102,8 +99,7 @@ data class ModelTurn(
 @Serializable
 data class ModelPart(
     val text: String? = null,
-    val mimeType: String? = null,
-    val data: String? = null
+    val inlineData: InlineData? = null
 )
 
 @Serializable

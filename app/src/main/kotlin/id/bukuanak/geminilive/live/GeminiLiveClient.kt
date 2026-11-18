@@ -1,6 +1,6 @@
 package id.bukuanak.geminilive.live
 
-import android.util.Base64
+import java.util.Base64
 import android.util.Log
 import id.bukuanak.geminilive.audio.AudioConfig
 import kotlinx.coroutines.CoroutineScope
@@ -10,12 +10,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.ByteString
 import java.util.concurrent.TimeUnit
 
 enum class LiveConnectionState {
@@ -42,24 +45,30 @@ sealed class LiveEvent {
  */
 class GeminiLiveClient(
     private val apiKey: String,
-    private val model: String = "models/gemini-2.0-flash-exp",
+    private val model: String = "gemini-3.8-live",
     private val voiceName: String = "Puck",
-    private val systemPrompt: String = "You are a fast, expressive voice assistant. Respond conversationally and concisely."
+    private val systemPrompt: String = "You are a fast, expressive voice assistant. Respond conversationally and concisely.",
+    private val webSocketFactory: WebSocket.Factory = OkHttpClient.Builder()
+        .readTimeout(0, TimeUnit.MILLISECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .pingInterval(20, TimeUnit.SECONDS)
+        .build(),
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    private val setupTimeoutMillis: Long = 20_000L
 ) {
 
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
         encodeDefaults = true
+        explicitNulls = false
     }
 
-    private val scope = CoroutineScope(Dispatchers.IO)
     private var webSocket: WebSocket? = null
-    private val okHttpClient = OkHttpClient.Builder()
-        .readTimeout(0, TimeUnit.MILLISECONDS) // No read timeout for persistent streaming
-        .writeTimeout(15, TimeUnit.SECONDS)
-        .pingInterval(20, TimeUnit.SECONDS)
-        .build()
+    private var setupTimeoutJob: Job? = null
+    private var connectionId = 0L
+    private var sentAudioChunks = 0L
+    private var receivedAudioChunks = 0L
 
     private val _connectionState = MutableStateFlow(LiveConnectionState.DISCONNECTED)
     val connectionState = _connectionState.asStateFlow()
@@ -67,59 +76,100 @@ class GeminiLiveClient(
     private val _events = MutableSharedFlow<LiveEvent>(extraBufferCapacity = 64)
     val events = _events.asSharedFlow()
 
+    @Synchronized
     fun connect() {
-        if (_connectionState.value == LiveConnectionState.CONNECTED ||
+        if (_connectionState.value == LiveConnectionState.SPEAKING ||
+            _connectionState.value == LiveConnectionState.CONNECTED ||
             _connectionState.value == LiveConnectionState.CONNECTING) {
             return
         }
 
         if (apiKey.isBlank()) {
-            emitEvent(LiveEvent.Error("API Key is missing. Please set your Gemini API Key in Settings."))
+            failConnection("API Key is missing. Please set your Gemini API Key in Settings.")
             return
         }
 
+        sentAudioChunks = 0L
+        receivedAudioChunks = 0L
         _connectionState.value = LiveConnectionState.CONNECTING
         emitLog("Initiating WebSocket connection to Gemini Live API...")
 
+        val id = ++connectionId
         val wsUrl = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=$apiKey"
         val request = Request.Builder()
             .url(wsUrl)
             .build()
 
-        webSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
+        webSocket = webSocketFactory.newWebSocket(request, object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) = forConnection(id) {
                 emitLog("WebSocket transport opened. Sending setup handshake...")
                 sendSetupMessage(webSocket)
             }
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
+            override fun onMessage(webSocket: WebSocket, text: String) = forConnection(id) {
                 handleIncomingMessage(text)
             }
 
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                emitLog("WebSocket closing: $code / $reason")
-                _connectionState.value = LiveConnectionState.DISCONNECTED
+            override fun onMessage(webSocket: WebSocket, bytes: ByteString) = forConnection(id) {
+                handleIncomingMessage(bytes.utf8())
             }
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                emitLog("WebSocket closed: $code / $reason")
-                _connectionState.value = LiveConnectionState.DISCONNECTED
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) = forConnection(id) {
+                handleClose(webSocket, code, reason)
             }
 
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                val errorMsg = "WebSocket connection failure: ${t.message ?: "Unknown error"}"
-                Log.e(TAG, errorMsg, t)
-                emitLog(errorMsg, isWarning = true)
-                _connectionState.value = LiveConnectionState.ERROR
-                emitEvent(LiveEvent.Error(errorMsg, t))
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = forConnection(id) {
+                handleClose(webSocket, code, reason)
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = forConnection(id) {
+                val status = response?.let { " (HTTP ${it.code})" }.orEmpty()
+                failConnection("WebSocket connection failure$status: ${t.message ?: "Unknown error"}", t)
             }
         })
+        setupTimeoutJob = scope.launch {
+            delay(setupTimeoutMillis)
+            forConnection(id) {
+                if (_connectionState.value == LiveConnectionState.CONNECTING) {
+                    failConnection("Gemini setup timed out after ${setupTimeoutMillis / 1000} seconds. Check your network, API key, and selected Live model.")
+                }
+            }
+        }
+    }
+
+    private fun forConnection(id: Long, action: () -> Unit) = synchronized(this) {
+        if (id == connectionId) action()
+    }
+
+    private fun handleClose(ws: WebSocket, code: Int, reason: String) {
+        val wasConnecting = _connectionState.value == LiveConnectionState.CONNECTING
+        ws.close(code, reason)
+        if (wasConnecting || code != 1000) {
+            failConnection("Gemini closed ${if (wasConnecting) "during setup" else "the session"} ($code): ${reason.ifBlank { "No reason provided" }}")
+        } else {
+            setupTimeoutJob?.cancel()
+            connectionId++
+            webSocket = null
+            _connectionState.value = LiveConnectionState.DISCONNECTED
+            emitLog("WebSocket closed: $code / $reason")
+        }
+    }
+
+    private fun failConnection(message: String, throwable: Throwable? = null) {
+        setupTimeoutJob?.cancel()
+        connectionId++
+        val socket = webSocket
+        webSocket = null
+        _connectionState.value = LiveConnectionState.ERROR
+        socket?.cancel()
+        emitLog(message, isWarning = true)
+        emitEvent(LiveEvent.Error(message, throwable))
     }
 
     private fun sendSetupMessage(ws: WebSocket) {
         val setupPayload = ClientMessage(
             setup = SetupConfig(
-                model = model,
+                model = "models/${model.trim().removePrefix("models/")}",
                 generationConfig = GenerationConfig(
                     responseModalities = listOf("AUDIO"),
                     speechConfig = SpeechConfig(
@@ -139,7 +189,7 @@ class GeminiLiveClient(
         if (success) {
             emitLog("Setup message dispatched (model: $model, voice: $voiceName)")
         } else {
-            emitLog("Failed to dispatch setup message to WebSocket", isWarning = true)
+            failConnection("Failed to dispatch setup message to WebSocket")
         }
     }
 
@@ -154,19 +204,24 @@ class GeminiLiveClient(
         }
 
         try {
-            val base64Data = Base64.encodeToString(pcmBytes, Base64.NO_WRAP)
+            val base64Data = Base64.getEncoder().encodeToString(pcmBytes)
             val chunkMessage = ClientMessage(
                 realtimeInput = RealtimeInput(
-                    mediaChunks = listOf(
-                        MediaChunk(
-                            mimeType = AudioConfig.MIME_TYPE_PCM_16KHZ,
-                            data = base64Data
-                        )
+                    audio = InlineData(
+                        mimeType = AudioConfig.MIME_TYPE_PCM_16KHZ,
+                        data = base64Data
                     )
                 )
             )
             val payloadJson = json.encodeToString(ClientMessage.serializer(), chunkMessage)
-            ws.send(payloadJson)
+            if (!ws.send(payloadJson)) {
+                emitEvent(LiveEvent.Error("Failed to send microphone audio: WebSocket is closed or its queue is full."))
+                return
+            }
+            sentAudioChunks++
+            if (sentAudioChunks == 1L || sentAudioChunks % 50L == 0L) {
+                emitLog("Microphone audio queued: chunks=$sentAudioChunks, chunkBytes=${pcmBytes.size}, pendingBytes=${ws.queueSize()}")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error sending realtime audio chunk", e)
         }
@@ -201,7 +256,13 @@ class GeminiLiveClient(
         try {
             val serverMessage = json.decodeFromString(ServerMessage.serializer(), text)
 
+            serverMessage.error?.let {
+                failConnection("Gemini API error (${it.code}): ${it.message}")
+                return
+            }
+
             if (serverMessage.setupComplete != null) {
+                setupTimeoutJob?.cancel()
                 _connectionState.value = LiveConnectionState.CONNECTED
                 emitLog("Handshake complete: Gemini Live session active!")
                 emitEvent(LiveEvent.SetupCompleted())
@@ -224,9 +285,14 @@ class GeminiLiveClient(
                     emitEvent(LiveEvent.TextReceived(part.text))
                 }
 
-                if (part.data != null && (part.mimeType == null || part.mimeType.startsWith("audio/pcm"))) {
+                val audio = part.inlineData
+                if (audio != null && audio.mimeType.startsWith("audio/pcm")) {
                     try {
-                        val audioBytes = Base64.decode(part.data, Base64.NO_WRAP)
+                        val audioBytes = Base64.getDecoder().decode(audio.data)
+                        receivedAudioChunks++
+                        if (receivedAudioChunks == 1L || receivedAudioChunks % 50L == 0L) {
+                            emitLog("Gemini audio received: chunks=$receivedAudioChunks, chunkBytes=${audioBytes.size}")
+                        }
                         _connectionState.value = LiveConnectionState.SPEAKING
                         emitEvent(LiveEvent.AudioReceived(audioBytes))
                     } catch (e: Exception) {
@@ -242,11 +308,15 @@ class GeminiLiveClient(
                 emitLog("Model finished turn.")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing server message JSON: $text", e)
+            failConnection("Invalid message from Gemini: ${e.message}", e)
         }
     }
 
+    @Synchronized
     fun disconnect() {
+        connectionId++
+        setupTimeoutJob?.cancel()
+        setupTimeoutJob = null
         emitLog("Disconnecting Gemini Live session...")
         try {
             webSocket?.close(1000, "User disconnected")

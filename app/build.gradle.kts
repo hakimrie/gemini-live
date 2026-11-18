@@ -32,6 +32,10 @@ android {
     shaders = false
   }
 
+  testOptions {
+    unitTests.isReturnDefaultValues = true // Android logging is unavailable in local JVM tests.
+  }
+
   packaging {
     resources {
       excludes += "/META-INF/{AL2.0,LGPL2.1}"

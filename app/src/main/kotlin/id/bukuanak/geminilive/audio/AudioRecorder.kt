@@ -98,6 +98,8 @@ class AudioRecorder(
         recordingJob?.cancel()
         recordingJob = scope.launch {
             val buffer = ByteArray(AudioConfig.INPUT_CHUNK_BYTES)
+            var chunks = 0L
+            var peakRms = 0f
 
             while (isActive && _isRecording.value) {
                 val record = audioRecord ?: break
@@ -106,6 +108,12 @@ class AudioRecorder(
                 if (bytesRead > 0) {
                     val rms = calculateRms(buffer, bytesRead)
                     _micRms.value = rms
+                    chunks++
+                    peakRms = maxOf(peakRms, rms)
+                    if (chunks == 1L || chunks % 50L == 0L) {
+                        Log.d(TAG, "Microphone capture: chunks=$chunks, peakRms=$peakRms, muted=$isMuted, echoGate=$enableSoftwareEchoGate, modelSpeaking=$isModelSpeaking")
+                        peakRms = 0f
+                    }
 
                     if (isMuted) {
                         // User muted mic: send silence or skip
@@ -122,6 +130,9 @@ class AudioRecorder(
 
                     val chunk = buffer.copyOf(bytesRead)
                     onAudioChunkReady(chunk)
+                } else if (bytesRead < 0) {
+                    Log.e(TAG, "Microphone read failed: $bytesRead")
+                    break
                 }
             }
         }
